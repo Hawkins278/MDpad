@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MDpad</title>
+<link rel="manifest" href="manifest.json">
+<!-- Web fallbacks for machines without the locally installed fonts; offline
+     this fails silently and the installed Jura / Goudy Old Style are used -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jura:wght@300..700&family=Sorts+Mill+Goudy:ital@0;1&display=swap">
+<style>
+  /* Presentation cloned from Markdown View (markdownview.tinygoodies.com):
+     amber header, soft-grey canvas, weight-400 headings, Default/Dark/Book
+     themes, five-step text sizing. */
+  :root {
+    --header-bg: #ffb900;
+    --header-fg: #333;
+  }
+  body[data-theme="default"] {
+    --view-bg: #efefef;
+    --view-fg: #333;
+    --view-font: Jura, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --code-fg: #24292e;
+    --code-bg: rgba(27,31,35,.05);
+    --table-border: #333;
+    --link: #33f;
+    --link-hover: #00f;
+    --muted: #777;
+    --chrome-bg: #e3e3e3;
+    --chrome-border: #ccc;
+  }
+  body[data-theme="dark"] {
+    --view-bg: #333;
+    --view-fg: #ccc;
+    --view-font: Jura, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --code-fg: #aaa;
+    --code-bg: rgba(27,31,35,.5);
+    --table-border: #ccc;
+    --link: #88f;
+    --link-hover: #66f;
+    --muted: #999;
+    --chrome-bg: #2a2a2a;
+    --chrome-border: #444;
+  }
+  body[data-theme="book"] {
+    --view-bg: #f8ecc2;
+    --view-fg: #604933;
+    --view-font: "Goudy Old Style", "Sorts Mill Goudy", Georgia, "Palatino Linotype", "Book Antiqua", Palatino, "Times New Roman", Times, serif;
+    --code-fg: #24292e;
+    --code-bg: rgba(27,31,35,.05);
+    --table-border: #604933;
+    --link: #33f;
+    --link-hover: #00f;
+    --muted: #8a7358;
+    --chrome-bg: #f0e2b6;
+    --chrome-border: #d8c894;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--view-bg);
+    color: var(--view-fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ---- Header (Markdown View amber bar) ---- */
+  #toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 48px;
+    padding: 0 10px;
+    background: var(--header-bg);
+    color: var(--header-fg);
+    flex: none;
+    user-select: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  #logo {
+    font-family: "Courier New", Courier, monospace;
+    font-weight: bold;
+    font-size: 17px;
+    margin-right: 10px;
+    white-space: nowrap;
+  }
+  #toolbar button {
+    background: transparent;
+    color: var(--header-fg);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 13px;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  #toolbar button:hover { background: rgba(0,0,0,.12); }
+  #toolbar button.active { background: #333; color: #ffb900; }
+  .sep { width: 1px; height: 26px; background: rgba(0,0,0,.25); margin: 0 6px; flex: none; }
+  #btn-smaller { font-size: 12px; }
+  #btn-larger { font-size: 16px; }
+  #filename {
+    font-size: 13px;
+    margin-left: auto;
+    padding-left: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  #dirtydot { color: #7a2f00; font-size: 18px; line-height: 1; visibility: hidden; }
+
+  /* ---- Panes ---- */
+  #main { flex: 1; display: flex; min-height: 0; }
+  #editor, #preview { flex: 1; min-width: 0; overflow-y: auto; }
+  #editor {
+    display: none;
+    border: none;
+    resize: none;
+    outline: none;
+    padding: 24px 2em;
+    background: var(--view-bg);
+    color: var(--view-fg);
+    font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    tab-size: 2;
+  }
+  body[data-mode="edit"] #editor { display: block; }
+  body[data-mode="edit"] #preview { display: none; }
+  body[data-mode="split"] #editor { display: block; border-right: 1px solid var(--chrome-border); }
+
+  /* ---- Rendered markdown: the Markdown View look ---- */
+  #preview {
+    padding: 0 2em;
+    background: var(--view-bg);
+    color: var(--view-fg);
+    font-family: var(--view-font);
+  }
+  #preview.font-size-x-small { font-size: .6em; }
+  #preview.font-size-small   { font-size: .8em; }
+  #preview.font-size-normal  { font-size: 1em; }
+  #preview.font-size-large   { font-size: 1.2em; }
+  #preview.font-size-x-large { font-size: 1.5em; }
+
+  #preview h1, #preview h2, #preview h3,
+  #preview h4, #preview h5, #preview h6 { font-weight: 400; }
+  #preview a { color: var(--link); }
+  #preview a:hover, #preview a:active { color: var(--link-hover); }
+  #preview code {
+    font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+    color: var(--code-fg);
+    background-color: var(--code-bg);
+    border-radius: 3px;
+    padding: 3px;
+    font-size: .9em;
+  }
+  #preview pre { overflow-x: auto; }
+  #preview pre code {
+    display: inline-block;
+    padding: 20px;
+    min-width: min(100%, 40em);
+  }
+  #preview blockquote {
+    margin: 0 0 1em;
+    padding: 2px 16px;
+    border-left: 4px solid var(--header-bg);
+    color: var(--muted);
+  }
+  #preview table { border-collapse: collapse; margin-bottom: 1em; display: block; overflow-x: auto; }
+  #preview th, #preview td {
+    border: 1px solid var(--table-border);
+    padding: .3em;
+  }
+  #preview img { max-width: 100%; }
+  #preview hr { border: none; border-top: 1px solid var(--table-border); margin: 1.5em 0; }
+  #preview li.task { list-style: none; margin-left: -1.2em; }
+  #preview li.task input { margin-right: .5em; accent-color: var(--header-bg); }
+
+  /* ---- Status bar ---- */
+  #statusbar {
+    display: flex;
+    gap: 16px;
+    padding: 3px 12px;
+    font-size: 12px;
+    color: var(--muted);
+    background: var(--chrome-bg);
+    border-top: 1px solid var(--chrome-border);
+    flex: none;
+    user-select: none;
+  }
+  #savemsg { color: #1F6F54; }
+  body[data-theme="dark"] #savemsg { color: #6fbf9a; }
+
+  /* ---- Empty state ---- */
+  #empty { text-align: center; color: var(--muted); margin-top: 14vh; }
+  #empty h1 { font-weight: 400; }
+  #empty a { color: var(--link); }
+  #empty kbd {
+    background: var(--code-bg);
+    border: 1px solid var(--chrome-border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: Consolas, monospace;
+    font-size: .85em;
+  }
+  /* ---- Print: rendered document only, browser handles pagination ---- */
+  @page { margin: 2cm; }
+  @media print {
+    #toolbar, #statusbar, #editor { display: none !important; }
+    html, body { height: auto; overflow: visible; background: #fff; }
+    body { display: block; }
+    #main { display: block; }
+    #preview {
+      display: block !important;
+      overflow: visible;
+      padding: 0;
+      background: #fff !important;
+      color: #111 !important;
+      font-family: var(--view-font); /* Book theme prints in serif */
+    }
+    #preview code { color: #111 !important; background: #f2f2f2 !important; }
+    #preview a { color: #054a92; text-decoration: underline; }
+    #preview blockquote { color: #444; border-left-color: #999; }
+    #preview th, #preview td { border-color: #333; }
+    #preview hr { border-top-color: #333; }
+    #preview h1, #preview h2, #preview h3 { break-after: avoid-page; }
+    #preview pre, #preview blockquote, #preview img, #preview tr { break-inside: avoid; }
+    #preview table { display: table; width: 100%; }
+    #preview pre { white-space: pre-wrap; word-break: break-word; }
+  }
+
+  body.dragover::after {
+    content: "Drop the file to open it";
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,.8);
+    color: #eee;
+    font-size: 1.4em;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body data-mode="read" data-theme="default">
+
+<div id="toolbar">
+  <span id="logo">&lt;MD&gt;pad</span>
+  <button id="btn-open" title="Open a markdown file (Ctrl+O)">Open</button>
+  <button id="btn-new" title="Start a new file (Ctrl+Alt+N)">New</button>
+  <button id="btn-save" title="Save (Ctrl+S)">Save</button>
+  <button id="btn-saveas" title="Save as a new file (Ctrl+Shift+S)">Save&nbsp;as</button>
+  <button id="btn-print" title="Print the rendered document (Ctrl+P)">Print</button>
+  <div class="sep"></div>
+  <button data-mode="read" class="active mode" title="Rendered view only">Read</button>
+  <button data-mode="split" class="mode" title="Editor and preview side by side">Split</button>
+  <button data-mode="edit" class="mode" title="Editor only (Ctrl+E toggles Read/Edit)">Edit</button>
+  <div class="sep"></div>
+  <button id="btn-smaller" title="Smaller text">A</button>
+  <button id="btn-larger" title="Larger text">A</button>
+  <div class="sep"></div>
+  <button data-theme="default" class="theme active" title="Light theme">Light</button>
+  <button data-theme="dark" class="theme" title="Dark theme">Dark</button>
+  <button data-theme="book" class="theme" title="Book theme — serif on cream">Book</button>
+  <span id="filename"><span id="dirtydot">●</span><span id="fname">No file open</span></span>
+</div>
+
+<div id="main">
+  <textarea id="editor" spellcheck="false" placeholder="# Start writing…"></textarea>
+  <div id="preview" class="font-size-normal"><div id="preview-inner">
+    <div id="empty">
+      <h1>&lt;MD&gt;pad</h1>
+      <p>Open a markdown file, drop one anywhere on this page,<br>
+         or start a <a href="#" id="empty-new">new file</a>.</p>
+      <p><kbd>Ctrl+O</kbd> open &nbsp; <kbd>Ctrl+S</kbd> save &nbsp; <kbd>Ctrl+E</kbd> read/edit</p>
+    </div>
+  </div></div>
+</div>
+
+<div id="statusbar">
+  <span id="stats">0 words</span>
+  <span id="savemsg"></span>
+  <span style="margin-left:auto" id="fsnote"></span>
+</div>
+
+<script>
+"use strict";
+
+/* ================= Markdown rendering =================
+   Self-contained renderer: headings, emphasis, code (inline + fenced),
+   lists (nested, ordered, task), blockquotes, tables, links, images,
+   horizontal rules. Raw HTML in the source is escaped, not executed. */
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function renderInline(text) {
+  let out = escapeHtml(text);
+  const codeSpans = [];
+  // Protect inline code from further formatting
+  out = out.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (m, ticks, code) => {
+    codeSpans.push("<code>" + code.trim() + "</code>");
+    return " " + (codeSpans.length - 1) + " ";
+  });
+  out = out
+    .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
+             '<img src="$2" alt="$1" title="$3">')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
+             '<a href="$2" title="$3" target="_blank" rel="noopener">$1</a>')
+    .replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[\s(])\*([^*\s][^*]*?)\*(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>")
+    .replace(/(^|[\s(])_([^_\s][^_]*?)_(?=[\s).,;:!?]|$)/g, "$1<em>$2</em>")
+    .replace(/~~([^~]+)~~/g, "<del>$1</del>");
+  out = out.replace(/ (\d+) /g, (m, i) => codeSpans[+i]);
+  return out;
+}
+
+function renderMarkdown(src) {
+  const lines = src.replace(/\r\n?/g, "\n").split("\n");
+  let html = "";
+  let i = 0;
+
+  function isTableSeparator(line) {
+    return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(line) && line.includes("-");
+  }
+
+  function parseList(startIndent) {
+    // Collect consecutive list items at or deeper than startIndent
+    const items = [];
+    let ordered = null;
+    while (i < lines.length) {
+      const m = lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+      if (!m) break;
+      const indent = m[1].length;
+      if (indent < startIndent) break;
+      if (indent > startIndent) {
+        // Deeper level: nest under the previous item
+        if (items.length === 0) break;
+        items[items.length - 1].children += parseList(indent);
+        continue;
+      }
+      const isOrd = /\d/.test(m[2][0]);
+      if (ordered === null) ordered = isOrd;
+      else if (isOrd !== ordered) break; // marker type changed: a new list starts
+      items.push({ text: m[3], children: "" });
+      i++;
+      // Continuation lines (indented, not new list items)
+      while (i < lines.length && /^\s{2,}\S/.test(lines[i]) &&
+             !/^(\s*)([-*+]|\d+[.)])\s+/.test(lines[i])) {
+        items[items.length - 1].text += " " + lines[i].trim();
+        i++;
+      }
+    }
+    const tag = ordered ? "ol" : "ul";
+    let out = "<" + tag + ">";
+    for (const it of items) {
+      const task = it.text.match(/^\[([ xX])\]\s+(.*)$/);
+      if (task) {
+        out += '<li class="task"><input type="checkbox" disabled' +
+               (task[1] !== " " ? " checked" : "") + ">" +
+               renderInline(task[2]) + it.children + "</li>";
+      } else {
+        out += "<li>" + renderInline(it.text) + it.children + "</li>";
+      }
+    }
+    return out + "</" + tag + ">";
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (/^\s*$/.test(line)) { i++; continue; }
+
+    // Fenced code block
+    const fence = line.match(/^(```+|~~~+)\s*(\S*)\s*$/);
+    if (fence) {
+      let code = "";
+      i++;
+      while (i < lines.length && !lines[i].startsWith(fence[1][0].repeat(3))) {
+        code += lines[i] + "\n"; i++;
+      }
+      i++; // skip closing fence
+      const lang = fence[2] ? ' class="language-' + escapeHtml(fence[2]) + '"' : "";
+      html += "<pre><code" + lang + ">" + escapeHtml(code) + "</code></pre>";
+      continue;
+    }
+
+    // Heading
+    const h = line.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
+    if (h) {
+      const n = h[1].length;
+      html += "<h" + n + ">" + renderInline(h[2]) + "</h" + n + ">";
+      i++; continue;
+    }
+
+    // Horizontal rule
+    if (/^\s*([-*_])\s*(\1\s*){2,}$/.test(line)) { html += "<hr>"; i++; continue; }
+
+    // Blockquote
+    if (/^\s*>/.test(line)) {
+      let quote = "";
+      while (i < lines.length && /^\s*>/.test(lines[i])) {
+        quote += lines[i].replace(/^\s*>\s?/, "") + "\n"; i++;
+      }
+      html += "<blockquote>" + renderMarkdown(quote) + "</blockquote>";
+      continue;
+    }
+
+    // List
+    if (/^(\s*)([-*+]|\d+[.)])\s+/.test(line)) {
+      html += parseList(line.match(/^(\s*)/)[1].length);
+      continue;
+    }
+
+    // Table
+    if (line.includes("|") && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+      const splitRow = r => r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map(c => c.trim());
+      const headers = splitRow(line);
+      const aligns = splitRow(lines[i + 1]).map(c => {
+        const l = c.startsWith(":"), r = c.endsWith(":");
+        return l && r ? "center" : r ? "right" : l ? "left" : "";
+      });
+      i += 2;
+      let body = "";
+      while (i < lines.length && lines[i].includes("|") && !/^\s*$/.test(lines[i])) {
+        body += "<tr>" + splitRow(lines[i]).map((c, k) =>
+          "<td" + (aligns[k] ? ' style="text-align:' + aligns[k] + '"' : "") + ">" +
+          renderInline(c) + "</td>").join("") + "</tr>";
+        i++;
+      }
+      html += "<table><thead><tr>" + headers.map((c, k) =>
+        "<th" + (aligns[k] ? ' style="text-align:' + aligns[k] + '"' : "") + ">" +
+        renderInline(c) + "</th>").join("") + "</tr></thead><tbody>" + body + "</tbody></table>";
+      continue;
+    }
+
+    // Paragraph: accumulate until a blank line or block-level construct
+    let para = line;
+    i++;
+    while (i < lines.length && !/^\s*$/.test(lines[i]) &&
+           !/^(#{1,6}\s|```|~~~|\s*>|(\s*)([-*+]|\d+[.)])\s+)/.test(lines[i]) &&
+           !(lines[i].includes("|") && i + 1 < lines.length && isTableSeparator(lines[i + 1]))) {
+      para += "\n" + lines[i]; i++;
+    }
+    html += "<p>" + renderInline(para).replace(/  \n/g, "<br>").replace(/\n/g, " ") + "</p>";
+  }
+  return html;
+}
+
+/* ================= App state & file handling ================= */
+
+// Storage can be unavailable in restricted contexts; degrade to per-session defaults
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} }
+};
+
+const editor = document.getElementById("editor");
+const preview = document.getElementById("preview");
+const previewInner = document.getElementById("preview-inner");
+const fname = document.getElementById("fname");
+const dirtydot = document.getElementById("dirtydot");
+const stats = document.getElementById("stats");
+const savemsg = document.getElementById("savemsg");
+const fsnote = document.getElementById("fsnote");
+
+let fileHandle = null;      // FileSystemFileHandle when opened via the API
+let currentName = "";       // display name
+let dirty = false;
+const hasFS = "showOpenFilePicker" in window;
+if (!hasFS) {
+  fsnote.textContent = "This browser can't save in place — Save will download a copy instead. Use Edge or Chrome for full saving.";
+}
+
+function setDirty(d) {
+  dirty = d;
+  dirtydot.style.visibility = d ? "visible" : "hidden";
+  document.title = (d ? "● " : "") + (currentName || "MDpad");
+}
+
+function refreshPreview() {
+  const text = editor.value;
+  previewInner.innerHTML = text.trim()
+    ? renderMarkdown(text)
+    : document.getElementById("empty")?.outerHTML ??
+      "<p style='color:var(--muted)'>Empty file.</p>";
+  rebindEmptyLink();
+  const words = (text.match(/\S+/g) || []).length;
+  stats.textContent = words + " word" + (words === 1 ? "" : "s") +
+                      " · " + text.length + " characters";
+}
+
+function flashSaved(msg) {
+  savemsg.textContent = msg;
+  setTimeout(() => { if (savemsg.textContent === msg) savemsg.textContent = ""; }, 2500);
+}
+
+function loadContent(text, name, handle) {
+  editor.value = text;
+  currentName = name;
+  fileHandle = handle || null;
+  fname.textContent = name || "No file open";
+  setDirty(false);
+  refreshPreview();
+}
+
+async function openViaPicker() {
+  if (!(await confirmDiscard())) return;
+  if (hasFS) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [{ description: "Markdown", accept: { "text/markdown": [".md", ".markdown", ".mdown", ".txt"] } }]
+      });
+      const file = await handle.getFile();
+      loadContent(await file.text(), file.name, handle);
+    } catch (e) { if (e.name !== "AbortError") alert("Could not open file: " + e.message); }
+  } else {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".md,.markdown,.mdown,.txt";
+    input.onchange = async () => {
+      const f = input.files[0];
+      if (f) loadContent(await f.text(), f.name, null);
+    };
+    input.click();
+  }
+}
+
+async function saveFile(forceAs) {
+  if (hasFS) {
+    try {
+      let handle = fileHandle;
+      if (forceAs || !handle) {
+        handle = await window.showSaveFilePicker({
+          suggestedName: currentName || "untitled.md",
+          types: [{ description: "Markdown", accept: { "text/markdown": [".md"] } }]
+        });
+      }
+      const writable = await handle.createWritable();
+      await writable.write(editor.value);
+      await writable.close();
+      fileHandle = handle;
+      currentName = handle.name;
+      fname.textContent = currentName;
+      setDirty(false);
+      flashSaved("Saved " + currentName);
+    } catch (e) { if (e.name !== "AbortError") alert("Save failed: " + e.message); }
+  } else {
+    // Fallback: download a copy
+    const blob = new Blob([editor.value], { type: "text/markdown" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = currentName || "untitled.md";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setDirty(false);
+    flashSaved("Downloaded a copy (this browser can't save in place)");
+  }
+}
+
+async function confirmDiscard() {
+  return !dirty || confirm("You have unsaved changes. Discard them?");
+}
+
+async function newFile() {
+  if (!(await confirmDiscard())) return;
+  loadContent("", "untitled.md", null);
+  setMode("edit");
+  editor.focus();
+}
+
+/* ---- Drag and drop ---- */
+let dragDepth = 0;
+document.addEventListener("dragenter", e => { e.preventDefault(); dragDepth++; document.body.classList.add("dragover"); });
+document.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragover"); } });
+document.addEventListener("dragover", e => e.preventDefault());
+document.addEventListener("drop", async e => {
+  e.preventDefault();
+  dragDepth = 0;
+  document.body.classList.remove("dragover");
+  if (!(await confirmDiscard())) return;
+  const item = e.dataTransfer.items && e.dataTransfer.items[0];
+  if (item && item.getAsFileSystemHandle) {
+    const handle = await item.getAsFileSystemHandle();
+    if (handle && handle.kind === "file") {
+      const file = await handle.getFile();
+      loadContent(await file.text(), file.name, handle);
+      return;
+    }
+  }
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) loadContent(await file.text(), file.name, null);
+});
+
+/* ---- Modes ---- */
+function setMode(mode) {
+  document.body.dataset.mode = mode;
+  document.querySelectorAll("#toolbar button.mode").forEach(b =>
+    b.classList.toggle("active", b.dataset.mode === mode));
+  if (mode !== "read") editor.focus();
+}
+document.querySelectorAll("#toolbar button.mode").forEach(b =>
+  b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+/* ---- Themes (Default / Dark / Book, as in Markdown View) ---- */
+function applyTheme(t) {
+  document.body.dataset.theme = t;
+  document.querySelectorAll("#toolbar button.theme").forEach(b =>
+    b.classList.toggle("active", b.dataset.theme === t));
+  store.set("mdpad-theme", t);
+}
+document.querySelectorAll("#toolbar button.theme").forEach(b =>
+  b.addEventListener("click", () => applyTheme(b.dataset.theme)));
+applyTheme(store.get("mdpad-theme") || "default");
+
+/* ---- Text size stepper (five steps, as in Markdown View) ---- */
+const SIZES = ["font-size-x-small", "font-size-small", "font-size-normal",
+               "font-size-large", "font-size-x-large"];
+let sizeIndex = +(store.get("mdpad-size") ?? 2);
+function applySize() {
+  sizeIndex = Math.max(0, Math.min(SIZES.length - 1, sizeIndex));
+  preview.classList.remove(...SIZES);
+  preview.classList.add(SIZES[sizeIndex]);
+  store.set("mdpad-size", sizeIndex);
+}
+document.getElementById("btn-smaller").addEventListener("click", () => { sizeIndex--; applySize(); });
+document.getElementById("btn-larger").addEventListener("click", () => { sizeIndex++; applySize(); });
+applySize();
+
+/* ---- Wiring ---- */
+document.getElementById("btn-open").addEventListener("click", openViaPicker);
+document.getElementById("btn-new").addEventListener("click", newFile);
+document.getElementById("btn-save").addEventListener("click", () => saveFile(false));
+document.getElementById("btn-saveas").addEventListener("click", () => saveFile(true));
+document.getElementById("btn-print").addEventListener("click", () => window.print());
+
+/* ---- Offline support when hosted (no-op for file:// use) ---- */
+if (location.protocol.startsWith("http") && "serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
+
+/* ---- Installed-app file handling (activates only when MDpad is installed
+   as a PWA with file_handlers; inert when opened as a plain page) ---- */
+if ("launchQueue" in window) {
+  window.launchQueue.setConsumer(async params => {
+    if (!params.files || !params.files.length) return;
+    const handle = params.files[0];
+    const file = await handle.getFile();
+    loadContent(await file.text(), file.name, handle);
+  });
+}
+
+function rebindEmptyLink() {
+  const link = document.getElementById("empty-new");
+  if (link) link.addEventListener("click", e => { e.preventDefault(); newFile(); });
+}
+rebindEmptyLink();
+
+let renderTimer = null;
+editor.addEventListener("input", () => {
+  setDirty(true);
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(refreshPreview, 150);
+});
+
+editor.addEventListener("keydown", e => {
+  if (e.key === "Tab") {
+    e.preventDefault();
+    const s = editor.selectionStart;
+    editor.setRangeText("  ", s, editor.selectionEnd, "end");
+    setDirty(true);
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(refreshPreview, 150);
+  }
+});
+
+document.addEventListener("keydown", e => {
+  if (!e.ctrlKey) return;
+  const k = e.key.toLowerCase();
+  if (k === "s") { e.preventDefault(); saveFile(e.shiftKey); }
+  else if (k === "o") { e.preventDefault(); openViaPicker(); }
+  else if (k === "e") {
+    e.preventDefault();
+    setMode(document.body.dataset.mode === "edit" ? "read" : "edit");
+  }
+  else if (k === "n" && e.altKey) { e.preventDefault(); newFile(); }
+});
+
+window.addEventListener("beforeunload", e => {
+  if (dirty) { e.preventDefault(); e.returnValue = ""; }
+});
+
+refreshPreview();
+</script>
+</body>
+</html>
