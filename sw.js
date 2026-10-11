@@ -1,5 +1,5 @@
 /* MDpad service worker — cache-first app shell so the installed app works offline. */
-const CACHE = "mdpad-v2"; // bump on every deploy or installed apps keep the old cache
+const CACHE = "mdpad-v3"; // bump on every deploy or installed apps keep the old cache
 const SHELL = ["./", "./mdpad.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {

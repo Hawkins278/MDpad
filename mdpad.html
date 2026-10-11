@@ -306,6 +306,27 @@
 <script>
 "use strict";
 
+/* ---- Installed-app file handling: registered FIRST so a double-clicked
+   file is never dropped by a later script error. The callback runs after
+   the page is ready (launch params are replayed), so it may safely use
+   functions defined below. Inert when opened as a plain page. ---- */
+if ("launchQueue" in window) {
+  window.launchQueue.setConsumer(async params => {
+    try {
+      if (!params.files || !params.files.length) return;
+      const handle = params.files[0];
+      const file = await handle.getFile();
+      if (typeof dirty !== "undefined" && dirty &&
+          !confirm("You have unsaved changes. Replace them with " + file.name + "?")) return;
+      loadContent(await file.text(), file.name, handle);
+      flashSaved("Opened " + file.name);
+    } catch (err) {
+      alert("MDpad was launched with a file but could not open it:\n" + err.message +
+            "\n\nIf this persists, check the app's File handling permission in Edge.");
+    }
+  });
+}
+
 /* ================= Markdown rendering =================
    Self-contained renderer: headings, emphasis, code (inline + fenced),
    lists (nested, ordered, task), blockquotes, tables, links, images,
@@ -660,17 +681,6 @@ document.getElementById("btn-print").addEventListener("click", () => window.prin
 /* ---- Offline support when hosted (no-op for file:// use) ---- */
 if (location.protocol.startsWith("http") && "serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
-}
-
-/* ---- Installed-app file handling (activates only when MDpad is installed
-   as a PWA with file_handlers; inert when opened as a plain page) ---- */
-if ("launchQueue" in window) {
-  window.launchQueue.setConsumer(async params => {
-    if (!params.files || !params.files.length) return;
-    const handle = params.files[0];
-    const file = await handle.getFile();
-    loadContent(await file.text(), file.name, handle);
-  });
 }
 
 function rebindEmptyLink() {
